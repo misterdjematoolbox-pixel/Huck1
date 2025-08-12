@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Escape the Mississippi – Huckleberry Finn</title>
+  <style>
+    :root{
+      --bg: #0b1220;
+      --card: #121a2c;
+      --ink: #eaf2ff;
+      --accent: #7cc7ff;
+      --accent2:#b2f5ea;
+      --danger:#ff7a7a;
+      --ok:#a7f0a0;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,Helvetica,Arial}
+    body{background:radial-gradient(1200px 600px at 70% -10%, #193055 0%, var(--bg) 60%);color:var(--ink);}    
+    .wrap{display:grid;grid-template-rows:auto 1fr auto;min-height:100%}
+    header{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:12px 16px;background:linear-gradient(180deg,#0e1730,transparent)}
+    header .brand{display:flex;align-items:center;gap:10px}
+    .brand .dot{width:12px;height:12px;border-radius:999px;background:linear-gradient(45deg,var(--accent),var(--accent2))}
+    .tag{opacity:.8;font-size:12px}
+    .controls{display:flex;gap:8px;flex-wrap:wrap}
+    .btn{background:rgba(255,255,255,.06);color:var(--ink);border:1px solid rgba(255,255,255,.12);padding:8px 12px;border-radius:12px;cursor:pointer;backdrop-filter:blur(4px)}
+    .btn:hover{border-color:rgba(255,255,255,.25)}
+    main{display:grid;place-items:center;padding:8px}
+    .stage{position:relative;width:min(100vw,1100px);aspect-ratio:16/9;border-radius:20px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.05)}
+    canvas{width:100%;height:100%;display:block;background:linear-gradient(#184f8a 0%, #0e345a 70%, #082544 100%)}
+    .hud{position:absolute;inset:0;pointer-events:none;padding:14px}
+    .hud .top{display:flex;justify-content:space-between;gap:10px}
+    .pill{pointer-events:auto;background:rgba(0,0,0,.25);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.15);border-radius:16px;padding:8px 12px;display:flex;gap:10px;align-items:center}
+    .pill strong{letter-spacing:.4px}
+    .bar{height:8px;background:rgba(255,255,255,.15);border-radius:999px;overflow:hidden}
+    .bar > div{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));width:50%}
+    .overlay{position:absolute;inset:0;display:none;place-items:center;background:linear-gradient(180deg,rgba(8,12,22,.65),rgba(6,9,16,.8));backdrop-filter:blur(4px)}
+    .card{width:min(780px,90%);background:var(--card);border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:18px 18px 14px;box-shadow:0 10px 40px rgba(0,0,0,.35)}
+    .card h2{margin:6px 0 8px;font-size:22px}
+    .card p{opacity:.9;line-height:1.5}
+    .choices{display:grid;gap:10px;margin-top:12px}
+    .choices .btn{width:100%;text-align:left}
+    .footer{display:flex;justify-content:space-between;align-items:center;margin-top:10px;opacity:.8;font-size:12px}
+    .kbd{padding:2px 6px;border:1px solid rgba(255,255,255,.3);border-radius:6px;background:rgba(255,255,255,.08)}
+    .toast{position:absolute;left:50%;transform:translateX(-50%);bottom:12px;background:rgba(0,0,0,.35);backdrop-filter:blur(5px);border:1px solid rgba(255,255,255,.15);padding:8px 12px;border-radius:12px;font-size:14px}
+    .badge{font-size:12px;opacity:.8}
+    .muted{opacity:.7}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand"><div class="dot"></div>
+        <div>
+          <div><strong>Escape the Mississippi</strong></div>
+          <div class="tag">A Huckleberry Finn Classroom Game</div>
+        </div>
+      </div>
+      <div class="controls">
+        <button class="btn" id="btnStart">▶ Start</button>
+        <button class="btn" id="btnPause">⏸ Pause</button>
+        <button class="btn" id="btnMute">🔊 Mute</button>
+        <button class="btn" id="btnReset">↻ Reset</button>
+        <button class="btn" id="btnTest">🧪 Run Tests</button>
+      </div>
+    </header>
+
+    <main>
+      <div class="stage">
+        <canvas id="game" width="1280" height="720" aria-label="Mississippi river canvas game"></canvas>
+        <div class="hud">
+          <div class="top">
+            <div class="pill"><strong>Score:</strong> <span id="score">0</span></div>
+            <div class="pill"><strong>Lives:</strong> <span id="lives">3</span></div>
+            <div class="pill" style="min-width:260px">
+              <div style="width:100%">
+                <div style="display:flex;justify-content:space-between"><strong>River Progress</strong><span class="badge" id="levelName">Act I – Leaving Home</span></div>
+                <div class="bar" aria-label="progress"><div id="progressBar"></div></div>
+              </div>
+            </div>
+          </div>
+          <div class="toast">Move with <span class="kbd">←</span><span class="kbd">→</span> and <span class="kbd">↑</span><span class="kbd">↓</span>. Avoid logs, collect pages. Answer questions to advance.</div>
+        </div>
+
+        <!-- Quiz / Decision overlay -->
+        <div class="overlay" id="overlay">
+          <div class="card" role="dialog" aria-modal="true">
+            <h2 id="ovTitle">Checkpoint Question</h2>
+            <p id="ovText">Answer to continue your journey down the Mississippi.</p>
+            <div class="choices" id="ovChoices"></div>
+            <div class="footer"><span class="muted">Class tip: students can discuss in pairs for 30s before answering.</span> <button class="btn" id="ovClose">Skip</button></div>
+          </div>
+        </div>
+
+        <!-- End overlay -->
+        <div class="overlay" id="end">
+          <div class="card">
+            <h2 id="endTitle">You reached Cairo!</h2>
+            <p id="endText">Great job navigating the river. Would you like to play again or export your score list for the class?</p>
+            <div class="choices">
+              <button class="btn" id="playAgain">Play Again</button>
+              <button class="btn" id="exportScores">Export Scores (CSV)</button>
+            </div>
+            <div class="footer"><span class="muted">Use this file for quick formative assessment.</span></div>
+          </div>
+        </div>
+
+        <!-- Tests overlay -->
+        <div class="overlay" id="tests">
+          <div class="card">
+            <h2>Runtime Tests</h2>
+            <div id="testResults" class="choices"></div>
+            <div class="footer"><span class="muted">Tests run in-browser without external libs.</span><button class="btn" id="closeTests">Close</button></div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer style="text-align:center;padding:10px 12px;opacity:.8">© For classroom use – Designed for quick setup, no external assets.</footer>
+  </div>
+
+  <script>
+  // Ensure DOM is ready before running game code
+  window.addEventListener('DOMContentLoaded', () => {
+  // ------------------ CONFIG ------------------
+  const CONFIG = {
+    maxLives: 3,
+    levelLength: 45000, // ms per level segment (shorter game)
+    segments: [
+      { name: 'Act I – Leaving Home', color: ['#1b5e9a','#0e3e6a'] },
+      { name: 'Act II – Raft with Jim', color: ['#154f80','#0a2f4e'] },
+      { name: 'Act III – Heading to Cairo', color: ['#0f4370','#08223d'] },
+    ],
+    speed: { base: 3, inc: 0.1, max: 7 },
+    spawn: { obstacleEvery: 1200, pageEvery: 2100 },
+  };
+  const SEG_COUNT = CONFIG.segments.length;
+
+  // Quiz (vocabulary focus + examples)
+  const QUIZ = [
+    {
+      title: "What does the word 'shore' mean?",
+      text: 'Choose the best definition.',
+      example: 'Huck and Jim pulled the raft to the shore to rest.',
+      choices: [
+        { label: 'The edge of a river or sea', correct: true, explain: 'Yes — the shore is the land along the water.' },
+        { label: 'A type of boat', correct: false, explain: 'That is not a definition of shore.' },
+        { label: 'A wooden pole', correct: false, explain: 'Not related.' },
+        { label: 'A hill or mountain', correct: false, explain: 'Not related.' },
+      ]
+    },
+    {
+      title: "What is an 'island'?",
+      text: 'Pick the correct meaning.',
+      example: 'They hid on a small island in the middle of the river.',
+      choices: [
+        { label: 'Land surrounded by water', correct: true, explain: 'Correct — water is all around an island.' },
+        { label: 'A place for boats to dock', correct: false, explain: 'That is a harbor or port.' },
+        { label: 'A mountain top', correct: false, explain: 'Not related.' },
+        { label: 'A sandy desert', correct: false, explain: 'Not related.' },
+      ]
+    },
+    {
+      title: "What does 'lay low' mean?",
+      text: 'Choose the best definition.',
+      example: 'Huck told Jim to lay low until the danger passed.',
+      choices: [
+        { label: 'To hide or stay out of sight', correct: true, explain: 'Yes — to keep quiet and hidden.' },
+        { label: 'To sleep outside', correct: false, explain: 'Not necessarily sleeping.' },
+        { label: 'To rest after eating', correct: false, explain: 'Not the meaning here.' },
+        { label: 'To walk slowly', correct: false, explain: 'Not the meaning here.' },
+      ]
+    },
+    {
+      title: "What does the verb 'to row' mean?",
+      text: 'Pick the correct action.',
+      example: 'They had to row hard to escape the current.',
+      choices: [
+        { label: 'To move a boat using oars', correct: true, explain: 'Correct — rowing uses oars to push water.' },
+        { label: 'To build a boat', correct: false, explain: 'That would be to construct.' },
+        { label: 'To swim across a river', correct: false, explain: 'Different action.' },
+        { label: 'To steer a steamboat', correct: false, explain: 'Steering is different from rowing.' },
+      ]
+    },
+    {
+      title: "What is a 'steamboat'?",
+      text: 'Choose the best definition.',
+      example: 'A large steamboat passed them on the Mississippi River.',
+      choices: [
+        { label: 'A boat powered by steam', correct: true, explain: 'Correct — steam engines drive the paddles or propeller.' },
+        { label: 'A raft made of wood', correct: false, explain: 'That describes a raft, not a steamboat.' },
+        { label: 'A fishing boat', correct: false, explain: 'Could be any power; not the definition.' },
+        { label: 'A small rowing boat', correct: false, explain: 'Rowboats are moved by oars, not steam.' },
+      ]
+    },
+  ];
+
+  // Decisions disabled for quiz-only mode
+  const DECISIONS = [];
+
+  // ------------------ STATE ------------------
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const hud = {
+    score: document.getElementById('score'),
+    lives: document.getElementById('lives'),
+    progress: document.getElementById('progressBar'),
+    levelName: document.getElementById('levelName')
+  };
+  const overlay = document.getElementById('overlay');
+  const ovTitle = document.getElementById('ovTitle');
+  const ovText = document.getElementById('ovText');
+  const ovChoices = document.getElementById('ovChoices');
+  const endOverlay = document.getElementById('end');
+  const testsOverlay = document.getElementById('tests');
+  const testResultsEl = document.getElementById('testResults');
+  const btnStart = document.getElementById('btnStart');
+  const btnPause = document.getElementById('btnPause');
+  const btnMute = document.getElementById('btnMute');
+  const btnReset = document.getElementById('btnReset');
+  const btnTest = document.getElementById('btnTest');
+  const btnClose = document.getElementById('ovClose');
+  const btnAgain = document.getElementById('playAgain');
+  const btnExport = document.getElementById('exportScores');
+  const btnCloseTests = document.getElementById('closeTests');
+
+  let playing = false, paused = false, muted = false;
+  let t0 = 0, last = 0, levelIndex = 0, progressMs = 0;
+  let score = 0, lives = CONFIG.maxLives;
+  let speed = CONFIG.speed.base;
+  let obstacles = [], pages = [];
+  let nextObstacle = 0, nextPage = 0;
+  let quizIndex = 0;
+  let playerName = 'Player';
+  let scoreboard = [];
+
+  // FX state
+  let fxParticles = []; // confetti / splashes
+  let fxRipples = [];   // ring ripples
+  let fxShake = 0;      // screen shake timer (ms)
+  let fxPulse = 0;      // raft scale pulse (ms)
+  let fxBarGlow = 0;    // progress bar glow (ms)
+
+  // Quiz order (shuffled each run)
+  let quizOrder = [];
+
+  // Player raft
+  const player = { x: 80, y: canvas.height/2, w: 80, h: 36, vx:0, vy:0 };
+
+  // ------------------ INPUT ------------------
+  const keys = new Set();
+  window.addEventListener('keydown', (e)=>{ keys.add(e.key); if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].includes(e.key)) e.preventDefault();});
+  window.addEventListener('keyup', (e)=>{ keys.delete(e.key);});
+
+  // IMPORTANT: Start now runs a full reset to ensure quizOrder is ready
+  btnStart.onclick = ()=>{ if(!playing){ init(); resetGame(); } };
+  btnPause.onclick = ()=>{ paused = !paused; if(!paused) requestAnimationFrame(loop); };
+  btnReset.onclick = ()=>{ resetGame(); };
+  btnTest.onclick = ()=>{ runTests(); };
+  btnMute.onclick = ()=>{ muted = !muted; btnMute.textContent = muted ? '🔈 Unmute' : '🔊 Mute'; };
+  btnClose.onclick = ()=>{ overlay.style.display='none'; resume(); };
+  btnAgain.onclick = ()=>{ endOverlay.style.display='none'; resetGame(); };
+  btnExport.onclick = exportScores;
+  btnCloseTests.onclick = ()=>{ testsOverlay.style.display='none'; };
+
+  // ------------------ HELPERS (bounds-safe) ------------------
+  function clampSegmentIndex(i){
+    if(SEG_COUNT === 0) return 0;
+    return Math.max(0, Math.min(i, SEG_COUNT-1));
+  }
+  function setLevelIndex(i){
+    const idx = clampSegmentIndex(i);
+    levelIndex = idx;
+    const seg = CONFIG.segments[idx];
+    hud.levelName.textContent = seg ? seg.name : '—';
+  }
+
+  // Fisher–Yates shuffle of indices 0..QUIZ.length-1
+  function getQuizOrder(){
+    const arr = [...Array(QUIZ.length).keys()];
+    for(let i=arr.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
+  // ------------------ INIT/RESET ------------------
+  function init(){
+    if(!playerName || playerName === 'Player'){
+      const maybe = prompt('Enter a player or team name (optional):','Team A');
+      if(maybe) playerName = maybe.slice(0,24);
+    }
+    t0 = performance.now(); last = t0;
+  }
+
+  function resetGame(){
+    playing = true; paused=false; muted=false;
+    score = 0; lives = CONFIG.maxLives; speed = CONFIG.speed.base; progressMs=0; quizIndex=0;
+    obstacles = []; pages = []; nextObstacle=0; nextPage=0;
+    fxParticles = []; fxRipples = []; fxShake = 0; fxPulse = 0; fxBarGlow = 0;
+    quizOrder = getQuizOrder();
+    player.x = 80; player.y = canvas.height/2; player.vx=0; player.vy=0;
+    setLevelIndex(0);
+    hud.score.textContent = score; hud.lives.textContent = lives;
+    overlay.style.display='none'; endOverlay.style.display='none';
+    t0 = performance.now(); last = t0; requestAnimationFrame(loop);
+  }
+
+  // ------------------ LOOP ------------------
+  function loop(t){
+    if(!playing || paused) return;
+    const dt = Math.min(32, t - last); // cap delta
+    last = t;
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // ------------------ UPDATE ------------------
+  function update(dt){
+    // Progress & difficulty
+    progressMs += dt; 
+    speed = Math.min(CONFIG.speed.max, speed + CONFIG.speed.inc * (dt/1000));
+
+    // Level transitions (BOUNDS-SAFE)
+    const totalLevelTime = CONFIG.levelLength * SEG_COUNT;
+    const globalProgress = totalLevelTime > 0 ? Math.min(1, progressMs / totalLevelTime) : 1;
+    const currentSegment = Math.floor(progressMs / CONFIG.levelLength);
+    const clamped = clampSegmentIndex(currentSegment);
+    if(clamped !== levelIndex){
+      setLevelIndex(clamped);
+    }
+    hud.progress.style.width = (globalProgress*100).toFixed(1)+'%';
+
+    // Input → velocity
+    const acc = 0.5; const damp = 0.9; const maxV = 6;
+    if(keys.has('ArrowLeft')) player.vx -= acc;
+    if(keys.has('ArrowRight')) player.vx += acc;
+    if(keys.has('ArrowUp')) player.vy -= acc;
+    if(keys.has('ArrowDown')) player.vy += acc;
+    player.vx *= damp; player.vy *= damp;
+    player.vx = Math.max(-maxV, Math.min(maxV, player.vx));
+    player.vy = Math.max(-maxV, Math.min(maxV, player.vy));
+    player.x += player.vx; player.y += player.vy;
+    player.x = Math.max(0, Math.min(canvas.width - player.w, player.x));
+    player.y = Math.max(0, Math.min(canvas.height - player.h, player.y));
+
+    // Spawns
+    nextObstacle -= dt; nextPage -= dt;
+    if(nextObstacle <= 0){
+      spawnObstacle(); nextObstacle = CONFIG.spawn.obstacleEvery * (0.6 + Math.random()*0.8);
+    }
+    if(nextPage <= 0){
+      spawnPage(); nextPage = CONFIG.spawn.pageEvery * (0.6 + Math.random()*0.8);
+    }
+
+    // Move entities & collisions
+    for(let i=obstacles.length-1;i>=0;i--){
+      const o = obstacles[i]; o.x -= speed + o.s; if(o.x < -o.w-20) obstacles.splice(i,1);
+      if(overlap(player,o)) { hit(); obstacles.splice(i,1); }
+    }
+    for(let i=pages.length-1;i>=0;i--){
+      const p = pages[i]; p.x -= speed*0.9; if(p.x < -p.size-20) pages.splice(i,1);
+      if(overlap(player,{x:p.x,y:p.y,w:p.size,h:p.size})) { collect(p); pages.splice(i,1); }
+    }
+
+    // Quiz timing (uses shuffled order)
+    if(progressMs > (quizIndex+1) * (CONFIG.levelLength/2) && quizIndex < QUIZ.length){
+      const idx = quizOrder[quizIndex];
+      if(Number.isInteger(idx) && idx >= 0 && idx < QUIZ.length){
+        pauseForQuiz(QUIZ[idx]);
+        quizIndex++;
+      }
+    }
+
+    // End condition
+    if(globalProgress >= 1){
+      finish();
+    }
+  }
+
+  // ------------------ DRAW ------------------
+  function draw(){
+    if(!ctx) return; // safety: no 2D context available
+    ctx.save();
+    // apply screen shake
+    if(fxShake > 0){
+      const mag = Math.min(12, 2 + fxShake/60);
+      ctx.translate((Math.random()*2-1)*mag, (Math.random()*2-1)*mag);
+      fxShake = Math.max(0, fxShake - 16);
+    }
+
+    // background gradient changes with segment
+    const seg = CONFIG.segments[clampSegmentIndex(levelIndex)] || { color: ['#0e345a','#082544'] };
+    const g = ctx.createLinearGradient(0,0,0,canvas.height);
+    g.addColorStop(0, seg.color[0]); g.addColorStop(1, seg.color[1]);
+    ctx.fillStyle = g; ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    // decorative waves
+    ctx.globalAlpha = 0.2; ctx.fillStyle = '#fff';
+    for(let i=0;i<6;i++){
+      const y = (Math.sin((last/800)+(i*1.2))*12)+ (i*100) + 120;
+      ctx.fillRect(((last/6)+(i*220))% (canvas.width+220)-220, y, canvas.width, 2);
+    }
+    ctx.globalAlpha = 1;
+
+    // pages (collectibles)
+    for(const p of pages){ drawPage(p); }
+
+    // obstacles
+    for(const o of obstacles){ drawLog(o); }
+
+    // FX ripples
+    for(let i=fxRipples.length-1;i>=0;i--){
+      const r = fxRipples[i]; r.t += 16; r.radius += r.grow; r.alpha -= 0.02;
+      if(r.alpha <= 0) { fxRipples.splice(i,1); continue; }
+      ctx.save(); ctx.globalAlpha = Math.max(0, r.alpha);
+      ctx.strokeStyle = r.color; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(r.x, r.y, r.radius, 0, Math.PI*2); ctx.stroke(); ctx.restore();
+    }
+
+    // Player raft with pulse
+    if(fxPulse > 0){ fxPulse = Math.max(0, fxPulse - 16); }
+    ctx.save();
+    const cx = player.x + player.w/2, cy = player.y + player.h/2;
+    if(fxPulse > 0){ const s = 1 + 0.08 * Math.sin(fxPulse/60); ctx.translate(cx, cy); ctx.scale(s, s); ctx.translate(-cx, -cy); }
+    drawRaft(player);
+    ctx.restore();
+
+    // FX particles
+    for(let i=fxParticles.length-1;i>=0;i--){
+      const p = fxParticles[i]; p.vx *= 0.99; p.vy += 0.18; p.x += p.vx; p.y += p.vy; p.life -= 16; p.alpha -= 0.01;
+      if(p.life <= 0 || p.alpha<=0 || p.y > canvas.height+40){ fxParticles.splice(i,1); continue; }
+      ctx.save(); ctx.globalAlpha = Math.max(0, p.alpha);
+      ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill(); ctx.restore();
+    }
+
+    ctx.restore();
+  }
+
+  // ------------------ ENTITIES ------------------
+  function spawnObstacle(){
+    const h = 20 + Math.random()*80; // log height
+    const w = 60 + Math.random()*140;
+    obstacles.push({ x: canvas.width + 40, y: Math.random()*(canvas.height-h), w, h, s: Math.random()*2 });
+  }
+  function spawnPage(){
+    const size = 22 + Math.random()*10;
+    pages.push({ x: canvas.width + 20, y: 40 + Math.random()*(canvas.height-80), size, r: Math.random()*Math.PI });
+  }
+  function drawLog(o){
+    ctx.save();
+    ctx.fillStyle = '#8b5e3c';
+    ctx.strokeStyle = 'rgba(0,0,0,.4)';
+    roundRect(ctx, o.x, o.y, o.w, o.h, 8);
+    ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+  function drawPage(p){
+    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(Math.sin(last/500 + p.r)*0.2);
+    ctx.fillStyle = '#f8f3e6'; ctx.strokeStyle = 'rgba(0,0,0,.25)';
+    roundRect(ctx, -p.size/2, -p.size/2, p.size, p.size*1.3, 4); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-p.size/2+4, 0); ctx.lineTo(p.size/2-4, 0); ctx.strokeStyle = 'rgba(0,0,0,.2)'; ctx.stroke();
+    ctx.restore();
+  }
+  function drawRaft(r){
+    ctx.save();
+    // raft base
+    ctx.fillStyle = '#a87449'; ctx.strokeStyle = 'rgba(0,0,0,.4)';
+    roundRect(ctx, r.x, r.y, r.w, r.h, 10); ctx.fill(); ctx.stroke();
+    // mast + lantern
+    ctx.fillStyle = '#c9d7ff';
+    ctx.fillRect(r.x + r.w*0.6, r.y - 28, 3, 28);
+    ctx.beginPath(); ctx.arc(r.x + r.w*0.6, r.y - 34, 6, 0, Math.PI*2); ctx.fill();
+    // shadow
+    ctx.globalAlpha = .2; ctx.fillStyle = '#000'; roundRect(ctx, r.x+6, r.y+r.h, r.w-12, 10, 6); ctx.fill(); ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+  function roundRect(ctx, x, y, w, h, r){
+    const rr = Math.min(r, w/2, h/2);
+    ctx.beginPath();
+    ctx.moveTo(x+rr,y);
+    ctx.arcTo(x+w,y,x+w,y+h,rr);
+    ctx.arcTo(x+w,y+h,x,y+h,rr);
+    ctx.arcTo(x,y+h,x,y,rr);
+    ctx.arcTo(x,y,x+w,y,rr);
+    ctx.closePath();
+  }
+
+  function overlap(a,b){
+    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+  }
+
+  // ------------------ GAME EVENTS ------------------
+  function hit(){
+    if(!muted) beep(200, 0.05);
+    lives--; hud.lives.textContent = lives;
+    triggerWrongAnim();
+    if(lives <= 0){
+      saveScore();
+      const safeIdx = clampSegmentIndex(levelIndex);
+      const segName = CONFIG.segments[safeIdx] ? CONFIG.segments[safeIdx].name : '—';
+      showEnd('Game Over', `Your raft sank near segment: ${segName}. Score: ${score}`);
+      playing = false; paused = true;
+    }
+  }
+  function collect(p){
+    score += 10; hud.score.textContent = score; if(!muted) beep(900, 0.03);
+    // small chance to trigger instant question — use shuffled order safely
+    if(Math.random() < 0.08 && quizIndex < QUIZ.length){
+      const idx = quizOrder[quizIndex];
+      if(Number.isInteger(idx) && idx >= 0 && idx < QUIZ.length){
+        pauseForQuiz(QUIZ[idx]);
+        quizIndex++;
+      }
+    }
+  }
+  function finish(){
+    saveScore();
+    showEnd('You reached Cairo!', `Final Score: ${score}. Huck and Jim thank you for a safe journey.`);
+    playing = false; paused = true;
+  }
+
+  function flash(color){
+    if(!ctx) return;
+    ctx.save(); ctx.fillStyle = color; ctx.globalAlpha = .2; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.restore();
+  }
+
+  // FX triggers
+  function triggerCorrectAnim(){
+    // confetti burst from raft
+    const cx = player.x + player.w*0.6, cy = player.y - 10;
+    for(let i=0;i<28;i++){
+      fxParticles.push({
+        x: cx, y: cy,
+        vx: (Math.random()*2-1)*4,
+        vy: -Math.random()*4 - 2,
+        size: 2 + Math.random()*3,
+        life: 900 + Math.random()*600,
+        alpha: 1,
+        color: Math.random() < .5 ? '#7cc7ff' : '#b2f5ea'
+      });
+    }
+    fxPulse = 600; // raft scale pulse
+    fxBarGlow = 600; // reserved for HUD effects
+  }
+
+  function triggerWrongAnim(){
+    fxShake = 600; // screen shake 0.6s
+    // red ripple around raft
+    const cx = player.x + player.w/2, cy = player.y + player.h/2;
+    fxRipples.push({ x: cx, y: cy, radius: 10, grow: 4, alpha: 0.8, color: '#ff7a7a', t: 0 });
+  }
+
+  // ------------------ QUIZ ------------------
+  function pause(){ paused = true; }
+  function resume(){ if(playing){ paused = false; requestAnimationFrame(loop);} }
+
+  function pauseForQuiz(q){
+    // Guard against undefined quiz items to avoid "Cannot read properties of undefined (reading 'title')"
+    if(!q || !q.title || !Array.isArray(q.choices)){
+      overlay.style.display='none';
+      // skip gracefully and continue
+      return resume();
+    }
+    pause();
+    ovTitle.textContent = q.title; ovText.textContent = q.text || '';
+    ovChoices.replaceChildren();
+    q.choices.forEach(ch=>{
+      const b = document.createElement('button'); b.className='btn'; b.textContent = ch.label;
+      b.onclick = ()=>{
+        if(ch.correct){
+          score += 25; hud.score.textContent = score; toast('Correct! +25'); if(!muted) beep(1200,0.06);
+          if(q.example){ setTimeout(()=>toast(q.example), 350); }
+          triggerCorrectAnim();
+        } else {
+          lives = Math.max(0, lives-1); hud.lives.textContent = lives; toast('Not quite. −1 life'); if(!muted) beep(140,0.08);
+          triggerWrongAnim();
+        }
+        overlay.style.display='none';
+        resume();
+      };
+      const small = document.createElement('div'); small.className='badge'; small.textContent = ' ';
+      b.appendChild(document.createElement('br')); b.appendChild(small);
+      b.onmouseover = ()=>{ small.textContent = ch.explain || ''; };
+      b.onmouseout = ()=>{ small.textContent = ' '; };
+      ovChoices.appendChild(b);
+    });
+    overlay.style.display='grid';
+  }
+
+  function showEnd(title, text){
+    document.getElementById('endTitle').textContent = title;
+    document.getElementById('endText').textContent = text;
+    endOverlay.style.display='grid';
+  }
+
+  function toast(msg){
+    const t = document.createElement('div'); t.className='toast'; t.textContent = msg;
+    const host = document.querySelector('.stage');
+    if(!host) return;
+    host.appendChild(t);
+    setTimeout(()=>t.remove(), 1600);
+  }
+
+  function saveScore(){
+    scoreboard.push({ name: playerName, score, date: new Date().toISOString() });
+  }
+  function exportScores(){
+    const header = 'name,score,date\n';
+    const rows = scoreboard.map(s=>`${escapeCsv(s.name)},${s.score},${s.date}`).join('\n');
+    const blob = new Blob([header+rows], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'huck_finn_scores.csv'; a.click(); URL.revokeObjectURL(url);
+  }
+  function escapeCsv(v){ return '"'+String(v).replace(/"/g,'""')+'"'; }
+
+  // ------------------ SOUND (tiny synth) ------------------
+  let audioCtx = null;
+  function beep(freq=440, dur=0.05){
+    if(muted) return;
+    try{
+      if(!audioCtx){ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+      const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+      o.type = 'sine'; o.frequency.value = freq; g.gain.value = 0.06; o.connect(g); g.connect(audioCtx.destination); o.start();
+      g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
+      o.stop(audioCtx.currentTime + dur);
+    }catch(e){ /* audio unsupported */ }
+  }
+
+  // ------------------ TESTS ------------------
+  function runTests(){
+    const results = [];
+    function t(name, fn){
+      let ok=false, err='';
+      try{ ok = !!fn(); }
+      catch(e){ ok=false; err=String(e); }
+      results.push({name, ok, err});
+    }
+
+    // 1) Clamp/segment indexing tests
+    t('clampSegmentIndex bounds', ()=>{
+      return clampSegmentIndex(-3)===0 && clampSegmentIndex(0)===0 && clampSegmentIndex(1)===1 && clampSegmentIndex(2)===2 && clampSegmentIndex(3)===Math.max(0, SEG_COUNT-1) && clampSegmentIndex(999)===Math.max(0, SEG_COUNT-1);
+    });
+    t('setLevelIndex with OOB index keeps valid name', ()=>{
+      setLevelIndex(999);
+      const txt = hud.levelName.textContent;
+      return typeof txt === 'string' && txt.length>0 && levelIndex===clampSegmentIndex(999);
+    });
+
+    // 2) Overlap tests
+    t('overlap: intersects returns true', ()=> overlap({x:0,y:0,w:10,h:10},{x:5,y:5,w:5,h:5}) === true);
+    t('overlap: separated returns false', ()=> overlap({x:0,y:0,w:10,h:10},{x:11,y:0,w:3,h:3}) === false);
+
+    // 3) CSV escaping
+    t('escapeCsv quotes', ()=> escapeCsv('a "quote" here') === '"a ""quote"" here"');
+
+    // 4) exportScores creates blob URL (monkey-patched)
+    t('exportScores calls URL.createObjectURL', ()=>{
+      const prev = URL.createObjectURL; let called=false; URL.createObjectURL = (blob)=>{ called=true; return 'blob:test'; };
+      scoreboard = [{name:'Team X', score:42, date:'2020-01-01T00:00:00Z'}];
+      exportScores();
+      URL.createObjectURL = prev; return called;
+    });
+
+    // 5) Pause/resume behavior
+    t('pause/resume toggles paused flag', ()=>{
+      const prev = playing; playing = true; pause(); const a = paused===true; resume(); const b = paused===false; playing = prev; return a && b;
+    });
+
+    // 6) End-of-run triggers finish() without errors
+    t('finish when globalProgress >= 1', ()=>{
+      const prevPlaying = playing, prevPaused = paused;
+      playing = true; paused = false;
+      progressMs = CONFIG.levelLength * SEG_COUNT; // exactly end
+      update(0);
+      const ok = (paused === true && playing === false && endOverlay.style.display === 'grid');
+      // cleanup for subsequent tests
+      endOverlay.style.display = 'none';
+      playing = prevPlaying; paused = prevPaused;
+      return ok;
+    });
+
+    // 7) No crash when progress is far beyond total time (index clamp)
+    t('safe level label far beyond time', ()=>{
+      const prevPlaying = playing; playing = true; paused = false;
+      progressMs = CONFIG.levelLength * SEG_COUNT * 10; // way past
+      update(0);
+      const txt = hud.levelName.textContent;
+      const ok = typeof txt === 'string' && txt.length > 0;
+      playing = prevPlaying; return ok;
+    });
+
+    // 8) QUIZ schema validity: each item has 4 choices and exactly one correct
+    t('QUIZ items have 4 choices & 1 correct', ()=>{
+      return QUIZ.every(q => Array.isArray(q.choices) && q.choices.length === 4 && q.choices.filter(c=>c.correct===true).length === 1);
+    });
+
+    // 9) QUIZ includes target vocabulary
+    t('QUIZ includes shore/island/lay low/to row/steamboat', ()=>{
+      const titles = QUIZ.map(q=>q.title.toLowerCase());
+      return (
+        titles.some(t=>t.includes('shore')) &&
+        titles.some(t=>t.includes('island')) &&
+        titles.some(t=>t.includes('lay low')) &&
+        titles.some(t=>t.includes('to row')) &&
+        titles.some(t=>t.includes('steamboat'))
+      );
+    });
+
+    // 10) Each vocab item provides an example sentence
+    t('Each QUIZ item has an example sentence', ()=>{
+      return QUIZ.every(q => typeof q.example === 'string' && q.example.length > 0);
+    });
+
+    // 11) Animation triggers set state as expected
+    t('triggerCorrectAnim spawns particles & pulse & green flash', ()=>{
+      const n0 = fxParticles.length; fxPulse = 0; fxFlash=null; triggerCorrectAnim();
+      const ok = fxParticles.length > n0 && fxPulse > 0 && fxFlash && fxFlash.color==='#a7f0a0' && fxFlash.t>0; fxParticles = []; fxPulse = 0; fxFlash=null; return ok;
+    });
+    t('triggerWrongAnim sets shake, ripple & red flash', ()=>{
+      const r0 = fxRipples.length; fxShake = 0; fxFlash=null; triggerWrongAnim();
+      const ok = fxShake > 0 && fxRipples.length === r0 + 1 && fxFlash && fxFlash.color==='#ff7a7a' && fxFlash.t>0; fxRipples = []; fxShake = 0; fxFlash=null; return ok;
+    });
+
+    // 12) getQuizOrder returns unique, in-range indices
+    t('getQuizOrder returns a valid permutation', ()=>{
+      const order = getQuizOrder();
+      if(!Array.isArray(order) || order.length !== QUIZ.length) return false;
+      const seen = new Set(order);
+      if(seen.size !== QUIZ.length) return false;
+      return order.every(i => Number.isInteger(i) && i >= 0 && i < QUIZ.length);
+    });
+
+    // 12b) shuffle preserves choices count and single correct
+    t('shuffle(q.choices) preserves size and 1 correct', ()=>{
+      const src = QUIZ[0].choices;
+      const out = shuffle(src);
+      if(!Array.isArray(out) || out.length !== src.length) return false;
+      const corr = out.filter(c=>c.correct===true).length === 1;
+      const sameRef = out === src;
+      return corr && !sameRef;
+    });
+
+    // 13) hit() with one life triggers end overlay and does not throw
+    t('hit with 1 life ends game safely', ()=>{
+      const prev = { playing, paused, lives, score };
+      playing = true; paused = false; lives = 1; score = 10;
+      let ok=false; try{ hit(); ok = (paused===true && playing===false && endOverlay.style.display==='grid'); }catch(e){ ok=false; }
+      // cleanup
+      endOverlay.style.display='none';
+      playing = prev.playing; paused = prev.paused; lives = prev.lives; score = prev.score;
+      return ok;
+    });
+
+    // 14) Start initializes quizOrder and game state
+    t('Start button initializes quizOrder and sets playing', ()=>{
+      playing = false; quizOrder = [];
+      btnStart.onclick();
+      const ok = playing === true && Array.isArray(quizOrder) && quizOrder.length === QUIZ.length;
+      return ok;
+    });
+
+    // 15) Instant quiz uses shuffled order without undefined
+    t('collect() triggers shuffled quiz safely', ()=>{
+      const prevRand = Math.random; Math.random = ()=>0; // force trigger
+      let captured = null; const prevPFQ = pauseForQuiz; pauseForQuiz = (q)=>{ captured = q; };
+      quizIndex = 0; quizOrder = [2,1,0,3,4];
+      collect({});
+      pauseForQuiz = prevPFQ; Math.random = prevRand;
+      return captured === QUIZ[2];
+    });
+
+    // 16) pauseForQuiz guards against undefined input
+    t('pauseForQuiz(undefined) does not throw', ()=>{
+      let ok = true; try{ pauseForQuiz(undefined); }catch(e){ ok = false; }
+      return ok;
+    });
+
+    // Render results in overlay
+    testResultsEl.replaceChildren();
+    results.forEach((r,i)=>{
+      const div = document.createElement('div');
+      div.className = 'pill';
+      div.innerHTML = `<strong>#${i+1}</strong> ${r.ok ? '✅' : '❌'} ${r.name}${r.err? ' — '+r.err:''}`;
+      testResultsEl.appendChild(div);
+    });
+    testsOverlay.style.display = 'grid';
+    toast(`${results.filter(r=>r.ok).length}/${results.length} tests passed`);
+  }
+
+  // Resize handling (robust)
+  function fit(){
+    const host = document.querySelector('.stage');
+    if(!host) return;
+    const rect = host.getBoundingClientRect();
+    canvas.width = Math.floor(rect.width);
+    canvas.height = Math.floor(rect.height);
+  }
+  if('ResizeObserver' in window){
+    new ResizeObserver(()=>fit()).observe(document.querySelector('.stage'));
+  } else {
+    window.addEventListener('resize', fit);
+  }
+  window.addEventListener('orientationchange', fit);
+  fit();
+
+  // (No auto-start) — requires user gesture for audio context
+  });
+  </script>
+</body>
+</html>
